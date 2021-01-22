@@ -3,7 +3,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-
 #define META_SIZE sizeof(struct block_meta)
 
 void *global_base = NULL;
@@ -21,7 +20,12 @@ struct block_meta *find_free_block(struct block_meta **last, size_t size) {
 	while (current && !(current -> free && current -> size >= size)) {
 		*last = current;
 		current = current -> next;
-	};
+	}
+	return current;
+}
+
+struct block_meta *get_block_ptr(void *ptr) {
+  return (struct block_meta*)ptr - 1;
 }
 
 //	Request space from the OS using sbrk to add our new block to the end of an linked list
@@ -41,19 +45,31 @@ struct block_meta *request_space(struct block_meta* last, size_t size) {
 
 	block -> size = size;
 	block -> next = NULL;
-	block -> free = 0x12345678;
+	block -> free = 0;
+	block -> dr_doom = 0x12345678;
 	return block;
 }
 
+void *nofree_malloc(size_t size) {
+  void *p = sbrk(0);
+  void *request = sbrk(size);
+  if (request == (void*) -1) { 
+    return NULL;
+  } else {
+    assert(p == request);
+    return p;
+  }
+}
+
 void *realloc(void *ptr, size_t size) {
-	if (!ptr) {
-		return malloc(size);
-	}
+  if (!ptr) {
+    return malloc(size);
+  }
 	
 	struct block_meta* block_ptr = get_block_ptr(ptr);
-	if (block_ptr -> size >= size) {
-		return ptr;
-	}
+  if (block_ptr -> size >= size) {
+    return ptr;
+  }
 
 	//	Realloc, Malloc new space and free the old space
 	//	Copies old data to new space
@@ -103,13 +119,13 @@ void *calloc(size_t nelem, size_t elsize) {
 }
 
 void free(void *ptr) {
-	if (!ptr) {
-		return;
-	}
+  if (!ptr) {
+    return;
+  }
 
 	struct block_meta* block_ptr = get_block_ptr(ptr);
-	assert(block_ptr -> free == 0);
-	assert(block_ptr -> dr_doom == 0x77777777 || block_ptr -> dr_doom == 0x12345678);
-	block_ptr -> free = 1;
+  assert(block_ptr -> free == 0);
+  assert(block_ptr -> dr_doom == 0x77777777 || block_ptr -> dr_doom == 0x12345678);
+  block_ptr -> free = 1;
 	block_ptr -> dr_doom = 0x55555555;
 }
